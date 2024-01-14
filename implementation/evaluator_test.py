@@ -18,7 +18,7 @@ import textwrap
 from absl.testing import absltest
 from absl.testing import parameterized
 
-from funsearch.implementation import evaluator
+import evaluator
 
 
 class EvaluatorTest(parameterized.TestCase):
