@@ -9,6 +9,7 @@ packages = [{include = "funsearch_unofficial_infra"}]
 
 [tool.poetry.dependencies]
 python = "^3.11"
+absl-py = "^2.0.0"
 
 
 [build-system]
