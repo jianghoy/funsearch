@@ -1,0 +1,16 @@
+[tool.poetry]
+name = "funsearch-unofficial-infra"
+version = "0.1.0"
+description = "Jianghong's unofficial implementation of infra of funsearch"
+authors = ["Jianghong <YJianghong@gmail.com>"]
+license = "Apache License, Version 2.0"
+readme = "README.md"
+packages = [{include = "funsearch_unofficial_infra"}]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
