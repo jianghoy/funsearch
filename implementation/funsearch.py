@@ -24,45 +24,63 @@ from implementation import programs_database
 from implementation import sampler
 
 
-def _extract_function_names(specification: str) -> tuple[str, str]:
-  """Returns the name of the function to evolve and of the function to run."""
-  run_functions = list(
-      code_manipulation.yield_decorated(specification, 'funsearch', 'run'))
-  if len(run_functions) != 1:
-    raise ValueError('Expected 1 function decorated with `@funsearch.run`.')
-  evolve_functions = list(
-      code_manipulation.yield_decorated(specification, 'funsearch', 'evolve'))
-  if len(evolve_functions) != 1:
-    raise ValueError('Expected 1 function decorated with `@funsearch.evolve`.')
-  return evolve_functions[0], run_functions[0]
-
-
 def main(specification: str, test_inputs: Sequence[Any], config: config_lib.Config):
-  """Launches a FunSearch experiment."""
+  """
+  Launches a FunSearch experiment.
+
+  Args:
+    specification (str): The specification of the experiment. It's a string representing python code.
+                         
+    test_inputs (Sequence[Any]): The test inputs for the experiment.
+    config (config_lib.Config): The configuration for the experiment. See `config.py` for more details.
+
+  Returns:
+    None
+  """
   function_to_evolve, function_to_run = _extract_function_names(specification)
 
   template = code_manipulation.text_to_program(specification)
   database = programs_database.ProgramsDatabase(
-      config.programs_database, template, function_to_evolve)
+    config.programs_database, template, function_to_evolve
+  )
 
   evaluators = []
   for _ in range(config.num_evaluators):
-    evaluators.append(evaluator.Evaluator(
+    evaluators.append(
+      evaluator.Evaluator(
         database,
         template,
         function_to_evolve,
         function_to_run,
         test_inputs,
-    ))
+      )
+    )
   # We send the initial implementation to be analysed by one of the evaluators.
   initial = template.get_function(function_to_evolve).body
   evaluators[0].analyse(initial, island_id=None, version_generated=None)
 
-  samplers = [sampler.Sampler(database, evaluators, config.samples_per_prompt)
-              for _ in range(config.num_samplers)]
+  samplers = [
+    sampler.Sampler(database, evaluators, config.samples_per_prompt)
+    for _ in range(config.num_samplers)
+  ]
 
   # This loop can be executed in parallel on remote sampler machines. As each
   # sampler enters an infinite loop, without parallelization only the first
   # sampler will do any work.
   for s in samplers:
     s.sample()
+
+
+def _extract_function_names(specification: str) -> tuple[str, str]:
+    """Returns the name of the function to evolve and of the function to run."""
+    run_functions = list(
+        code_manipulation.yield_decorated(specification, "funsearch", "run")
+    )
+    if len(run_functions) != 1:
+        raise ValueError("Expected 1 function decorated with `@funsearch.run`.")
+    evolve_functions = list(
+        code_manipulation.yield_decorated(specification, "funsearch", "evolve")
+    )
+    if len(evolve_functions) != 1:
+        raise ValueError("Expected 1 function decorated with `@funsearch.evolve`.")
+    return evolve_functions[0], run_functions[0]

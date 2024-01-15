@@ -104,6 +104,7 @@ class ProgramVisitor(ast.NodeVisitor):
   """Parses code to collect all required information to produce a `Program`.
 
   Note that we do not store function decorators.
+  TODO: THIS MEANS THAT FUNCTIONS WITH DECORATORS CANNOT BE USED.
   """
 
   def __init__(self, sourcecode: str):
