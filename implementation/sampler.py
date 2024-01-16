@@ -18,9 +18,8 @@ from collections.abc import Collection, Sequence
 
 import numpy as np
 
-from implementation import evaluator
-from implementation import programs_database
-
+import evaluator
+import programs_database
 
 class LLM:
   """Language model that predicts continuation of provided source code."""
@@ -28,13 +27,13 @@ class LLM:
   def __init__(self, samples_per_prompt: int) -> None:
     self._samples_per_prompt = samples_per_prompt
 
-  def _draw_sample(self, prompt: str) -> str:
-    """Returns a predicted continuation of `prompt`."""
-    raise NotImplementedError('Must provide a language model.')
-
   def draw_samples(self, prompt: str) -> Collection[str]:
     """Returns multiple predicted continuations of `prompt`."""
     return [self._draw_sample(prompt) for _ in range(self._samples_per_prompt)]
+  
+  def _draw_sample(self, prompt: str) -> str:
+    """Returns a predicted continuation of `prompt`."""
+    raise NotImplementedError('Must provide a language model.')
 
 
 class Sampler:
