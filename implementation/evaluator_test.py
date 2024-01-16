@@ -85,6 +85,18 @@ def new_f():'''
     actual = evaluator._trim_function_body(code)
     self.assertEqual(actual, code)
 
+  def test_write_file(self):
+    code = textwrap.dedent(
+        '''\
+        def f(input: str):
+          print(input)
+        '''
+    )
+    filename = 'test_output.py'
+    evaluator._write_python_file(filename, code, 'f', '"Hello World!"')
+    desired = code + "\n" + "if __name__ == '__main__':\n  f(\"Hello World!\")"
+    with open(filename) as f:
+      self.assertEqual(desired, f.read())
 
 if __name__ == '__main__':
   absltest.main()

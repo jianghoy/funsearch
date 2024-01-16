@@ -19,7 +19,7 @@ import textwrap
 from absl.testing import absltest
 from absl.testing import parameterized
 
-from implementation import code_manipulation
+import code_manipulation
 
 _IMPORTS: str = '''\
 import itertools

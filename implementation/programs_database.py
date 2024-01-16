@@ -24,8 +24,8 @@ from absl import logging
 import numpy as np
 import scipy
 
-from implementation import code_manipulation
-from implementation import config as config_lib
+import code_manipulation
+import config as config_lib
 
 Signature = tuple[float, ...]
 ScoresPerTest = Mapping[Any, float]
@@ -45,14 +45,19 @@ def _softmax(logits: np.ndarray, temperature: float) -> np.ndarray:
   result[index] = 1 - np.sum(result[0:index]) - np.sum(result[index+1:])
   return result
 
-
+# I don't think this is correct. Because scores_per_test is a map and the output will not be mapped to a 
+# correct value ot a specific key, and comparing with wrong key will yield bad result.
 def _reduce_score(scores_per_test: ScoresPerTest) -> float:
   """Reduces per-test scores into a single score."""
-  return scores_per_test[list(scores_per_test.keys())[-1]]
+  return scores_per_test[max(scores_per_test.keys())]
 
 
 def _get_signature(scores_per_test: ScoresPerTest) -> Signature:
-  """Represents test scores as a canonical signature."""
+  """
+  Represents test scores as a canonical signature.
+  We define the signature of a program as the tuple containing the program’s 
+  scores on each of the inputs (e.g., the cap set size for each input n).
+  """
   return tuple(scores_per_test[k] for k in sorted(scores_per_test.keys()))
 
 
@@ -107,21 +112,6 @@ class ProgramsDatabase:
     code, version_generated = self._islands[island_id].get_prompt()
     return Prompt(code, version_generated, island_id)
 
-  def _register_program_in_island(
-      self,
-      program: code_manipulation.Function,
-      island_id: int,
-      scores_per_test: ScoresPerTest,
-  ) -> None:
-    """Registers `program` in the specified island."""
-    self._islands[island_id].register_program(program, scores_per_test)
-    score = _reduce_score(scores_per_test)
-    if score > self._best_score_per_island[island_id]:
-      self._best_program_per_island[island_id] = program
-      self._best_scores_per_test_per_island[island_id] = scores_per_test
-      self._best_score_per_island[island_id] = score
-      logging.info('Best score of island %d increased to %s', island_id, score)
-
   def register_program(
       self,
       program: code_manipulation.Function,
@@ -143,6 +133,21 @@ class ProgramsDatabase:
     if (time.time() - self._last_reset_time > self._config.reset_period):
       self._last_reset_time = time.time()
       self.reset_islands()
+
+  def _register_program_in_island(
+      self,
+      program: code_manipulation.Function,
+      island_id: int,
+      scores_per_test: ScoresPerTest,
+  ) -> None:
+    """Registers `program` in the specified island."""
+    self._islands[island_id].register_program(program, scores_per_test)
+    score = _reduce_score(scores_per_test)
+    if score > self._best_score_per_island[island_id]:
+      self._best_program_per_island[island_id] = program
+      self._best_scores_per_test_per_island[island_id] = scores_per_test
+      self._best_score_per_island[island_id] = score
+      logging.info('Best score of island %d increased to %s', island_id, score)
 
   def reset_islands(self) -> None:
     """Resets the weaker half of islands."""

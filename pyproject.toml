@@ -12,6 +12,7 @@ python = "^3.11"
 absl-py = "^2.0.0"
 numpy = "^1.26.3"
 scipy = "^1.11.4"
+docker = "^7.0.0"
 
 
 [build-system]
