@@ -20,6 +20,7 @@ Or, you can find all needed dependencies under `[tool.poetry.dependencies]` in `
 python main.py -s specs_example_cap_set.py -t test_inputs_example_cap_set.txt
 ```
 
+**TODO: update options**
 options:  
   -h, --help            show this help message and exit  
   --functions_per_prompt FUNCTIONS_PER_PROMPT  
@@ -48,4 +49,6 @@ options:
                         Path to the file containing the test inputs. Each line of the file is a test input, and the test inputs are separated by new
                         lines. See test_inputs_example_cap_set.txt for an example.
 
-## License and disclaimer
+### `specification_file`
+
+### `test_input_file`
