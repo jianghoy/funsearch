@@ -24,8 +24,8 @@ from absl import logging
 import numpy as np
 import scipy
 
-import code_manipulation
-import config as config_lib
+from . import code_manipulation
+from . import config as config_lib
 
 Signature = tuple[float, ...]
 ScoresPerTest = Mapping[Any, float]

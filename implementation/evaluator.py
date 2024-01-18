@@ -23,8 +23,9 @@ import docker
 import threading
 import time
 
-import code_manipulation
-import programs_database
+from . import code_manipulation
+from . import programs_database
+
 import uuid
 
 PYTHON_IMAGE = "python:3.11-slim"
