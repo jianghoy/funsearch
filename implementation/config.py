@@ -16,7 +16,7 @@
 """Configuration of a FunSearch experiment."""
 import dataclasses
 
-
+DEFAULT_DOCKER_IMAGE: str = 'funsearch_evaluator:latest'
 @dataclasses.dataclass(frozen=True)
 class ProgramsDatabaseConfig:
   """Configuration of a ProgramsDatabase.
@@ -51,9 +51,12 @@ class Config:
         can execute in parallel as part of a distributed system.
     samples_per_prompt: How many independently sampled program continuations to
         obtain for each prompt.
+    docker_image: Docker image used to run evaluations.
   """
   programs_database: ProgramsDatabaseConfig = dataclasses.field(
       default_factory=ProgramsDatabaseConfig)
   num_samplers: int = 15
   num_evaluators: int = 140
   samples_per_prompt: int = 4
+
+  docker_image: str = DEFAULT_DOCKER_IMAGE
