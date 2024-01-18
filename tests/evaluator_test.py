@@ -18,7 +18,7 @@ import textwrap
 from absl.testing import absltest
 from absl.testing import parameterized
 
-import evaluator
+from implementation import evaluator
 
 
 class EvaluatorTest(parameterized.TestCase):

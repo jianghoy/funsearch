@@ -17,11 +17,11 @@
 from collections.abc import Sequence
 from typing import Any
 
-import code_manipulation
-import config as config_lib
-import evaluator
-import programs_database
-import sampler
+from . import code_manipulation
+from . import config as config_lib
+from . import evaluator
+from . import programs_database
+from . import sampler
 
 
 def main(specification: str, test_inputs: Sequence[Any], config: config_lib.Config):
