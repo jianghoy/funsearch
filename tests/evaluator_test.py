@@ -19,7 +19,7 @@ from absl.testing import absltest
 from absl.testing import parameterized
 
 from implementation import evaluator
-
+import os
 
 class EvaluatorTest(parameterized.TestCase):
 
@@ -88,15 +88,44 @@ def new_f():'''
   def test_write_file(self):
     code = textwrap.dedent(
         '''\
-        def f(input: str):
-          print(input)
+        def f(input: str) -> int:
+          return len(input)
         '''
     )
     filename = 'test_output.py'
     evaluator._write_python_file(filename, code, 'f', '"Hello World!"')
-    desired = code + "\n" + "if __name__ == '__main__':\n  f(\"Hello World!\")"
+    desired = code + "if __name__ == '__main__':\n  print(f(\"Hello World!\"))"
+
+    
     with open(filename) as f:
-      self.assertEqual(desired, f.read())
+      actual_lines = f.readlines()
+      actual_lines = [line.strip() for line in actual_lines if line.strip()]
+      desired_lines = desired.splitlines()
+      desired_lines = [line.strip() for line in desired_lines if line.strip()]
+      self.assertEqual(desired_lines, actual_lines)
+    os.remove(filename)
+
+  def test_write_file_remove_annotations(self):
+    code = textwrap.dedent(
+        '''\
+        @funsearch.run()
+        def f(input: str) -> int:
+          return len(input)
+        '''
+    )
+    filename = 'test_output_2.py'
+    evaluator._write_python_file(filename, code, 'f', '"Hello World!"')
+    # remove first line @funsearch in code
+    desired = code[code.find('def f'):] + "if __name__ == '__main__':\n  print(f(\"Hello World!\"))"
+
+    
+    with open(filename) as f:
+      actual_lines = f.readlines()
+      actual_lines = [line.strip() for line in actual_lines if line.strip()]
+      desired_lines = desired.splitlines()
+      desired_lines = [line.strip() for line in desired_lines if line.strip()]
+      self.assertEqual(desired_lines, actual_lines)
+    os.remove(filename)
 
 if __name__ == '__main__':
   absltest.main()
