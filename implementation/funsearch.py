@@ -53,6 +53,7 @@ def main(specification: str, test_inputs: Sequence[Any], config: config_lib.Conf
         function_to_evolve,
         function_to_run,
         test_inputs,
+        config.docker_image
       )
     )
   # We send the initial implementation to be analysed by one of the evaluators.
