@@ -2,9 +2,13 @@
 
 [original repo](https://github.com/google-deepmind/funsearch)
 This repository contains Jianghong's implementation of infra of [funsearch](https://deepmind.google/discover/blog/funsearch-making-new-discoveries-in-mathematical-sciences-using-large-language-models/), including:
-1. language model client for generating new programs.
-2. sandbox for executing untrusted code.
-3. distributed system for running FunSearch.
+- [ ] language model client for generating new programs.  
+  - [ ] Feature parity: use [Google Cloud Vertex AI Code model](https://cloud.google.com/vertex-ai/docs/generative-ai/code/code-models-overview)
+  - [ ] Feature parity: use [StarCoder](https://github.com/bigcode-project/starcoder) from [vendor ???]()
+  - [ ] GPT4
+  - [ ] [Code Llama](https://ai.meta.com/blog/code-llama-large-language-model-coding/) from [vendor replicate]()
+- [x] sandbox for executing untrusted code.
+- [ ] single host thread based distributed system for running FunSearch.
 
 ## Installation
 ### Using poetry
