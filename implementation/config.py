@@ -60,3 +60,4 @@ class Config:
   samples_per_prompt: int = 4
 
   docker_image: str = DEFAULT_DOCKER_IMAGE
+  total_llm_samples: int = 10
