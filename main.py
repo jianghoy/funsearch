@@ -2,12 +2,14 @@ from implementation import funsearch
 from implementation.config import ProgramsDatabaseConfig, Config
 import argparse
 import dataclasses
+from dotenv import load_dotenv
 
 # Generate a argparse where it takes all required params of Config and ProgramsDatabaseConfig, should set
 # them to all optional
 
 programs_database_config_fields = dataclasses.fields(ProgramsDatabaseConfig)
 config_fields = dataclasses.fields(Config)
+
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Entry point of funsearch")
@@ -23,7 +25,7 @@ def parse_args():
             required=False,
         )
     for field in config_fields:
-        if field.name == 'programs_database':
+        if field.name == "programs_database":
             continue
         parser.add_argument(
             f"--{field.name}",
@@ -59,22 +61,28 @@ def parse_args():
 
 
 def main():
+    load_dotenv()
     args = parse_args()
 
     # Use the __dict__ attribute of args to pass the arguments to the dataclass.
     # Filter out None values to let dataclass use its default values.
     args_dict = {k: v for k, v in vars(args).items() if v is not None}
-    programs_database_args_dict = {k: v for k, v in args_dict.items() if k in programs_database_config_fields}
+    programs_database_args_dict = {
+        k: v for k, v in args_dict.items() if k in programs_database_config_fields
+    }
     # Initialize your data object
+
     programs_database = ProgramsDatabaseConfig(**programs_database_args_dict)
 
     config_args_dict = {k: v for k, v in args_dict.items() if k in config_fields}
     config = Config(programs_database=programs_database, **config_args_dict)
+
     with open(args.specification_file) as file:
         specification = file.read()
     with open(args.test_inputs_file) as file:
         test_inputs = file.read().splitlines()
     funsearch.main(specification, test_inputs, config)
+
 
 # generate default
 if __name__ == "__main__":

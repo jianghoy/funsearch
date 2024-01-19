@@ -225,7 +225,7 @@ def _wait_for_finish(container, timeout):
         container.reload()
         if container.status != "running":
             break
-        asyncio.sleep(0.5)
+        time.sleep(0.5)
     return time.time() - start_time < timeout
 
 

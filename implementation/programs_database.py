@@ -58,12 +58,11 @@ class ProgramsDatabase:
         config: config_lib.ProgramsDatabaseConfig,
         template: code_manipulation.Program,
         function_to_evolve: str,
-        report_dir: str,
     ) -> None:
         self._config: config_lib.ProgramsDatabaseConfig = config
         self._template: code_manipulation.Program = template
         self._function_to_evolve: str = function_to_evolve
-        self._report_root_dir: str = report_dir
+        self._report_root_dir: str = config.report_dir
 
         # Initialize empty islands.
         self._islands: list[Island] = []
@@ -175,7 +174,7 @@ class ProgramsDatabase:
                 f.write("}\n")
         for i in range(len(self._best_program_per_island)):
             with open(report_dir + f"/island_{i}_best_program.py", "w") as f:
-                f.write(self._best_program_per_island[i].code)
+                f.write(str(self._best_program_per_island[i]))
 
 
 class Island:

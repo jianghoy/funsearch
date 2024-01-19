@@ -22,6 +22,8 @@ Or, you can find all needed dependencies under `[tool.poetry.dependencies]` in `
 ## Usage
 ### Prepare docker image for testing
 The sandbox uses docker to run tests against funsearch generated programs. Sample [Dockerfile](./Dockerfile) for cap_set is provided.
+### Add API keys to `.env`
+To use remote APIs for generating new python functions, you need to first rename `.env_example` to `.env`, and then add your API key to corresponding entries.
 ### Run `main.py`
 ```
 python main.py -s specs_example_cap_set.py -t test_inputs_example_cap_set.txt
