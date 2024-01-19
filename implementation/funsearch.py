@@ -16,6 +16,7 @@
 """A single-threaded implementation of the FunSearch pipeline."""
 from collections.abc import Sequence
 from typing import Any
+import traceback
 
 from . import code_manipulation
 from . import config as config_lib
@@ -25,57 +26,59 @@ from . import sampler
 
 
 def main(specification: str, test_inputs: Sequence[Any], config: config_lib.Config):
-  """
-  Launches a FunSearch experiment.
+    """
+    Launches a FunSearch experiment.
 
-  Args:
-    specification (str): The specification of the experiment. It's a string representing python code.
-                         
-    test_inputs (Sequence[Any]): The test inputs for the experiment.
-    config (config_lib.Config): The configuration for the experiment. See `config.py` for more details.
+    Args:
+      specification (str): The specification of the experiment. It's a string representing python code.
 
-  Returns:
-    None
-  """
-  function_to_evolve, function_to_run = _extract_function_names(specification)
+      test_inputs (Sequence[Any]): The test inputs for the experiment.
+      config (config_lib.Config): The configuration for the experiment. See `config.py` for more details.
 
-  template = code_manipulation.text_to_program(specification)
-  database = programs_database.ProgramsDatabase(
-    config.programs_database, template, function_to_evolve
-  )
+    Returns:
+      None
+    """
+    function_to_evolve, function_to_run = _extract_function_names(specification)
 
-  evaluators = []
-  for _ in range(config.num_evaluators):
-    evaluators.append(
-      evaluator.Evaluator(
-        database,
-        template,
-        function_to_evolve,
-        function_to_run,
-        test_inputs,
-        config.docker_image
-      )
+    template = code_manipulation.text_to_program(specification)
+    database = programs_database.ProgramsDatabase(
+        config.programs_database, template, function_to_evolve
     )
-  # We send the initial implementation to be analysed by one of the evaluators.
-  initial = template.get_function(function_to_evolve).body
-  evaluators[0].analyse(initial, island_id=None, version_generated=None)
 
-  samplers = [
-    sampler.Sampler(database, evaluators, config.samples_per_prompt)
-    for _ in range(config.num_samplers)
-  ]
+    evaluators = []
+    for _ in range(config.num_evaluators):
+        evaluators.append(
+            evaluator.Evaluator(
+                database,
+                template,
+                function_to_evolve,
+                function_to_run,
+                test_inputs,
+                config.docker_image,
+            )
+        )
+    # We send the initial implementation to be analysed by one of the evaluators.
+    initial = template.get_function(function_to_evolve).body
+    evaluators[0].analyse(initial, island_id=None, version_generated=None)
 
-  # This loop can be executed in parallel on remote sampler machines. As each
-  # sampler enters an infinite loop, without parallelization only the first
-  # sampler will do any work.
-  try:
-    for s in samplers:
-      s.sample()
-  except Exception as e:
-     print(e)
-  finally:
-     database.report()
-     
+    samplers = [
+        sampler.Sampler(
+            database, evaluators, config.samples_per_prompt, config.total_llm_samples
+        )
+        for _ in range(config.num_samplers)
+    ]
+
+    # This loop can be executed in parallel on remote sampler machines. As each
+    # sampler enters an infinite loop, without parallelization only the first
+    # sampler will do any work.
+    try:
+        for s in samplers:
+            s.sample()
+    except Exception as e:
+        traceback.print_exc()
+        print(e)
+    finally:
+        database.report()
 
 
 def _extract_function_names(specification: str) -> tuple[str, str]:
