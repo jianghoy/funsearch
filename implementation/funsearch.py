@@ -68,8 +68,14 @@ def main(specification: str, test_inputs: Sequence[Any], config: config_lib.Conf
   # This loop can be executed in parallel on remote sampler machines. As each
   # sampler enters an infinite loop, without parallelization only the first
   # sampler will do any work.
-  for s in samplers:
-    s.sample()
+  try:
+    for s in samplers:
+      s.sample()
+  except Exception as e:
+     print(e)
+  finally:
+     database.report()
+     
 
 
 def _extract_function_names(specification: str) -> tuple[str, str]:

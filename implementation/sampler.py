@@ -44,14 +44,17 @@ class Sampler:
       database: programs_database.ProgramsDatabase,
       evaluators: Sequence[evaluator.Evaluator],
       samples_per_prompt: int,
+      total_llm_samples: int,
   ) -> None:
     self._database = database
     self._evaluators = evaluators
     self._llm = LLM(samples_per_prompt)
+    self._total_llm_samples = total_llm_samples
+    self.sample_cnt = 0
 
   def sample(self):
     """Continuously gets prompts, samples programs, sends them for analysis."""
-    while True:
+    while sample.sample_cnt < self._total_llm_samples:
       prompt = self._database.get_prompt()
       samples = self._llm.draw_samples(prompt.code)
       # This loop can be executed in parallel on remote evaluator machines.
