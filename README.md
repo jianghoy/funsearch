@@ -61,3 +61,6 @@ See [specs_example_cap_set.py](specs_example_cap_set.py) for an example. Basical
 
 ### `test_input_file`
 Test cases input, each line is 1 test case. See [test_inputs_example_cap_set.txt](test_inputs_example_cap_set.txt) for an example.
+
+# TODO
+1. It seems that right now the Prompt being feed into the LLM generator is missing the skeleton. Basically, according to [paper](https://storage.googleapis.com/deepmind-media/DeepMind.com/Blog/funsearch-making-new-discoveries-in-mathematical-sciences-using-large-language-models/Mathematical-discoveries-from-program-search-with-large-language-models.pdf) page 24, we need to add the skeleton to the prompt.

@@ -47,9 +47,8 @@ CODELLAMA_34B_PYTHON = "meta/codellama-34b-python:e4cb69045bdb604862e80b5dd17ef3
 class ReplicateLLM(LLM):
     """Concrete implementation of LLM that provides a language model."""
 
-    def __init__(self, samples_per_prompt: int, additional_arg: str) -> None:
+    def __init__(self, samples_per_prompt: int) -> None:
         super().__init__(samples_per_prompt)
-        self.additional_arg = additional_arg
 
     def _draw_sample(self, prompt: str) -> str:
         print(prompt)
@@ -88,7 +87,7 @@ class Sampler:
 
     def sample(self):
       """Continuously gets prompts, samples programs, sends them for analysis."""
-      while sample.sample_cnt < self._total_llm_samples:
+      while self.sample_cnt < self._total_llm_samples:
         prompt = self._database.get_prompt()
         samples = self._llm.draw_samples(prompt.code)
         # This loop can be executed in parallel on remote evaluator machines.
