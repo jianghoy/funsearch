@@ -115,8 +115,8 @@ class ProgramsDatabaseTest(parameterized.TestCase):
         function_to_evolve=function_to_evolve,
     )
     # Register the initial implementation provided in the skeleton template.
-    database.register_program(
-        program=template.get_function(function_to_evolve),
+    database.register_function(
+        function=template.get_function(function_to_evolve),
         island_id=None,
         scores_per_test={'unused': -1})
     # Verify the first prompt.
@@ -151,12 +151,12 @@ class ProgramsDatabaseTest(parameterized.TestCase):
     scores = [7, 3, 5, 6, 7, -2, 0, -1, 4, 3]
     unused_function = template.get_function(function_to_evolve)
     for i, score in enumerate(scores):
-      database.register_program(
-          program=unused_function,
+      database.register_function(
+          function=unused_function,
           island_id=i,
           scores_per_test={'unused_input': score},
       )
-    database.register_program(
+    database.register_function(
         unused_function, island_id=7, scores_per_test={'unused_input': 17})
 
     expected_scores = list(scores)

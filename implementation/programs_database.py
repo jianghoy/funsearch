@@ -77,7 +77,7 @@ class ProgramsDatabase:
                 )
             )
         self._best_score_per_island: list[float] = [-float("inf")] * config.num_islands
-        self._best_program_per_island: list[code_manipulation.Function | None] = [
+        self._best_function_per_island: list[code_manipulation.Function | None] = [
             None
         ] * config.num_islands
         self._best_scores_per_test_per_island: list[ScoresPerTest | None] = [
@@ -92,39 +92,39 @@ class ProgramsDatabase:
         code, version_generated = self._islands[island_id].get_prompt()
         return Prompt(code, version_generated, island_id)
 
-    def register_program(
+    def register_function(
         self,
-        program: code_manipulation.Function,
+        function: code_manipulation.Function,
         island_id: int | None,
         scores_per_test: ScoresPerTest,
     ) -> None:
-        """Registers `program` in the database."""
+        """Registers `function` in the database. The function, is the function we wish to involve, denoted by @funsearch.evolve"""
         # In an asynchronous implementation we should consider the possibility of
-        # registering a program on an island that had been reset after the prompt
+        # registering a function on an island that had been reset after the prompt
         # was generated. Leaving that out here for simplicity.
         if island_id is None:
-            # This is a program added at the beginning, so adding it to all islands.
+            # This is a function added at the beginning, so adding it to all islands.
             for island_id in range(len(self._islands)):
-                self._register_program_in_island(program, island_id, scores_per_test)
+                self._register_function_in_island(function, island_id, scores_per_test)
         else:
-            self._register_program_in_island(program, island_id, scores_per_test)
+            self._register_function_in_island(function, island_id, scores_per_test)
 
         # Check whether it is time to reset an island.
         if time.time() - self._last_reset_time > self._config.reset_period:
             self._last_reset_time = time.time()
             self.reset_islands()
 
-    def _register_program_in_island(
+    def _register_function_in_island(
         self,
-        program: code_manipulation.Function,
+        function: code_manipulation.Function,
         island_id: int,
         scores_per_test: ScoresPerTest,
     ) -> None:
-        """Registers `program` in the specified island."""
-        self._islands[island_id].register_program(program, scores_per_test)
+        """Registers `function` in the specified island."""
+        self._islands[island_id].register_function(function, scores_per_test)
         score = _reduce_score(scores_per_test)
         if score > self._best_score_per_island[island_id]:
-            self._best_program_per_island[island_id] = program
+            self._best_function_per_island[island_id] = function
             self._best_scores_per_test_per_island[island_id] = scores_per_test
             self._best_score_per_island[island_id] = score
             logging.info("Best score of island %d increased to %s", island_id, score)
@@ -149,9 +149,9 @@ class ProgramsDatabase:
             )
             self._best_score_per_island[island_id] = -float("inf")
             founder_island_id = np.random.choice(keep_islands_ids)
-            founder = self._best_program_per_island[founder_island_id]
+            founder = self._best_function_per_island[founder_island_id]
             founder_scores = self._best_scores_per_test_per_island[founder_island_id]
-            self._register_program_in_island(founder, island_id, founder_scores)
+            self._register_function_in_island(founder, island_id, founder_scores)
 
     def report(self) -> None:
         # if self.report_dir not exist create new directory
@@ -172,9 +172,10 @@ class ProgramsDatabase:
                 for key in sorted_keys:
                     f.write(f"{key}: {best_score_per_test[key]},")
                 f.write("}\n")
-        for i in range(len(self._best_program_per_island)):
+        for i in range(len(self._best_function_per_island)):
             with open(report_dir + f"/island_{i}_best_program.py", "w") as f:
-                f.write(str(self._best_program_per_island[i]))
+                # TODO: update this to get best program instead of function
+                f.write(str(self._best_function_per_island[i]))
 
 
 class Island:
@@ -195,21 +196,21 @@ class Island:
         self._cluster_sampling_temperature_period = cluster_sampling_temperature_period
 
         self._clusters: dict[Signature, Cluster] = {}
-        self._num_programs: int = 0
+        self._num_functions: int = 0
 
-    def register_program(
+    def register_function(
         self,
-        program: code_manipulation.Function,
+        function: code_manipulation.Function,
         scores_per_test: ScoresPerTest,
     ) -> None:
-        """Stores a program on this island, in its appropriate cluster."""
+        """Stores a function on this island, in its appropriate cluster."""
         signature = _get_signature(scores_per_test)
         if signature not in self._clusters:
             score = _reduce_score(scores_per_test)
-            self._clusters[signature] = Cluster(score, program)
+            self._clusters[signature] = Cluster(score, function)
         else:
-            self._clusters[signature].register_program(program)
-        self._num_programs += 1
+            self._clusters[signature].register_function(function)
+        self._num_functions += 1
 
     # TODO: test this.
     def get_prompt(self) -> tuple[str, int]:
@@ -222,12 +223,12 @@ class Island:
         # Convert scores to probabilities using softmax with temperature schedule.
         period = self._cluster_sampling_temperature_period
         temperature = self._cluster_sampling_temperature_init * (
-            1 - (self._num_programs % period) / period
+            1 - (self._num_functions % period) / period
         )
         probabilities = _softmax(cluster_scores, temperature)
 
         # At the beginning of an experiment when we have few clusters, place fewer
-        # programs into the prompt.
+        # functions into the prompt as example.
         functions_per_prompt = min(len(self._clusters), self._functions_per_prompt)
 
         idx = np.random.choice(
@@ -238,7 +239,7 @@ class Island:
         scores = []
         for signature in chosen_signatures:
             cluster = self._clusters[signature]
-            implementations.append(cluster.sample_program())
+            implementations.append(cluster.sample_function())
             scores.append(cluster.score)
 
         indices = np.argsort(scores)
@@ -290,11 +291,11 @@ class Island:
 
 
 class Cluster:
-    """A cluster of programs on the same island and with the same Signature."""
+    """A cluster of functions on the same island and with the same Signature."""
 
     def __init__(self, score: float, implementation: code_manipulation.Function):
         self._score = score
-        self._programs: list[code_manipulation.Function] = [implementation]
+        self._functions: list[code_manipulation.Function] = [implementation]
         self._lengths: list[int] = [len(str(implementation))]
 
     @property
@@ -302,18 +303,18 @@ class Cluster:
         """Reduced score of the signature that this cluster represents."""
         return self._score
 
-    def register_program(self, program: code_manipulation.Function) -> None:
-        """Adds `program` to the cluster."""
-        self._programs.append(program)
-        self._lengths.append(len(str(program)))
+    def register_function(self, function: code_manipulation.Function) -> None:
+        """Adds `function` to the cluster."""
+        self._functions.append(function)
+        self._lengths.append(len(str(function)))
 
-    def sample_program(self) -> code_manipulation.Function:
-        """Samples a program, giving higher probability to shorther programs."""
+    def sample_function(self) -> code_manipulation.Function:
+        """Samples a function, giving higher probability to shorther functions."""
         normalized_lengths = (np.array(self._lengths) - min(self._lengths)) / (
             max(self._lengths) + 1e-6
         )
         probabilities = _softmax(-normalized_lengths, temperature=1.0)
-        return np.random.choice(self._programs, p=probabilities)
+        return np.random.choice(self._functions, p=probabilities)
 
 
 def _softmax(logits: np.ndarray, temperature: float) -> np.ndarray:
@@ -341,7 +342,7 @@ def _reduce_score(scores_per_test: ScoresPerTest) -> float:
 def _get_signature(scores_per_test: ScoresPerTest) -> Signature:
     """
     Represents test scores as a canonical signature.
-    We define the signature of a program as the tuple containing the program’s
+    We define the signature of a evolution target function as the tuple containing the evolution target function's
     scores on each of the inputs (e.g., the cap set size for each input n).
     """
     return tuple(scores_per_test[k] for k in sorted(scores_per_test.keys()))
