@@ -78,7 +78,7 @@ class Evaluator:
             else:
                 skip_registering = True
         if not skip_registering:
-            self._database.register_program(new_function, island_id, scores_per_test)
+            self._database.register_function(new_function, island_id, scores_per_test)
 
 
 class Sandbox:
