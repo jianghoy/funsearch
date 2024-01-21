@@ -6,9 +6,12 @@ This repository contains Jianghong's implementation of infra of [funsearch](http
   - [ ] Feature parity: use [Google Cloud Vertex AI Code model](https://cloud.google.com/vertex-ai/docs/generative-ai/code/code-models-overview)
   - [ ] Feature parity: use [StarCoder](https://github.com/bigcode-project/starcoder) from [vendor ???]()
   - [ ] GPT4
-  - [ ] [Code Llama](https://ai.meta.com/blog/code-llama-large-language-model-coding/) from [vendor replicate]()
+  - [x] [Code Llama](https://ai.meta.com/blog/code-llama-large-language-model-coding/) from [vendor replicate](https://replicate.com/meta/codellama-34b-python)
 - [x] sandbox for executing untrusted code.
-- [ ] single host thread based distributed system for running FunSearch.
+- [ ] single host `asyncio` based multitasking for running FunSearch efficiently. See below for analysis.
+
+## Why asyncio?
+Based on my observation, implementing multi-host or multi-process for funsearch is not beneficial under a certain scale limit. Here I assume a typical user uses a cloud based LLM provider via API.(based on the paper it seems the experiment setup manages a set of ML accelerators, which by default has to be distributed, and brings a lot of engineering level challenges). The bottleneck is not the CPU or memory, but the network latency (and cost) of each LLM API call, which is around 1 second. The python method to be executed in sandbox doesn't seem to use a lot of resources either. So the typical workload fits nicely to the `asyncio` model. Given enough budget, one may be able to call hundreds of LLM APIs in parallel, and multi-host can be beneficial.  
 
 ## Installation
 ### Using poetry
