@@ -35,41 +35,41 @@ class Evaluator:
     def __init__(
         self,
         database: programs_database.ProgramsDatabase,
-        template: code_manipulation.Program,
-        function_to_evolve: str,
-        function_to_run: str,
+        program: code_manipulation.Program,
+        function_to_evolve_name: str,
+        function_to_run_name: str,
         test_inputs: Sequence[Any],
         sandbox_docker_image: str,
         timeout_seconds: int = 10,
     ):
         self._database = database
-        self._template = template
-        self._function_to_evolve = function_to_evolve
-        self._function_to_run = function_to_run
+        self._program = program
+        self._function_to_evolve_name = function_to_evolve_name
+        self._function_to_run_name = function_to_run_name
         self._test_inputs = test_inputs
         self._timeout_seconds = timeout_seconds
         self._sandbox = Sandbox(sandbox_docker_image)
 
     def analyse(
         self,
-        sample: str,
+        sample_function_body: str,
         island_id: int | None,
         version_generated: int | None,
     ) -> None:
         """Compiles the sample into a program and executes it on test inputs."""
-        new_function, program = _sample_to_program(
-            sample, version_generated, self._template, self._function_to_evolve
+        new_function, program = _add_sample_to_program(
+            sample_function_body, version_generated, self._program, self._function_to_evolve_name
         )
 
         scores_per_test = {}
         skip_registering = False
         for test_input in self._test_inputs:
             test_output, runs_ok = self._sandbox.run(
-                program, self._function_to_run, test_input, self._timeout_seconds
+                program, self._function_to_run_name, test_input, self._timeout_seconds
             )
             if (
                 runs_ok
-                and not _calls_ancestor(program, self._function_to_evolve)
+                and not _calls_ancestor(program, self._function_to_evolve_name)
                 and test_output is not None
             ):
                 if not isinstance(test_output, (int, float)):
@@ -187,13 +187,13 @@ def _trim_function_body(generated_code: str) -> str:
     return "\n".join(body_lines) + "\n\n"
 
 
-def _sample_to_program(
+def _add_sample_to_program(
     generated_code: str,
     version_generated: int | None,
     template: code_manipulation.Program,
     function_to_evolve: str,
 ) -> tuple[code_manipulation.Function, str]:
-    """Returns the compiled generated function and the full runnable program."""
+    """Rename sampled new function to default name and return program with sampled function."""
     body = _trim_function_body(generated_code)
     if version_generated is not None:
         body = code_manipulation.rename_function_calls(
