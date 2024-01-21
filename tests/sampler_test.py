@@ -1,5 +1,5 @@
 from asyncio import Queue
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, AsyncMock
 import asyncio
 from implementation.sampler import Sampler, LLM, ReplicateLLM
 from implementation.programs_database import Prompt
@@ -18,12 +18,12 @@ TEST_REPLICATE_INPUT_ARGS = {
 
 
 class TestLLM(LLM):
-    def __init__(self, samples_per_prompt: int) -> None:
-        super().__init__(samples_per_prompt)
+    def __init__(self, samples_per_prompt: int, queue: asyncio.Queue) -> None:
+        super().__init__(samples_per_prompt, queue)
 
-    async def _draw_sample_and_send_to_queue(self, prompt: str, queue: Queue) -> None:
+    async def _draw_sample(self, prompt: str) -> None:
         await asyncio.sleep(0.01)
-        queue.put(prompt)
+        return prompt
 
 
 class TestSampler(unittest.IsolatedAsyncioTestCase):
@@ -32,8 +32,9 @@ class TestSampler(unittest.IsolatedAsyncioTestCase):
         total_llm_samples = 2
         samples_per_prompt = 5
         mock_queue = MagicMock()
+        mock_queue.put = AsyncMock()
         sampler = Sampler(
-            mock_database, total_llm_samples, TestLLM(samples_per_prompt), mock_queue
+            mock_database, total_llm_samples, TestLLM(samples_per_prompt, mock_queue)
         )
         prompt = Prompt("code", 0, 0)
         mock_database.get_prompt.return_value = prompt
@@ -44,7 +45,7 @@ class TestSampler(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             mock_queue.put.call_count, total_llm_samples * samples_per_prompt
         )
-        mock_queue.put.assert_called_with(prompt.code)
+        mock_queue.put.assert_called_with((prompt.code, prompt.island_id, prompt.version_generated))
 
     # Comment out because the test is basically testing connection to replicate, and is very slow.
     # async def test_replicate_llm(self):
