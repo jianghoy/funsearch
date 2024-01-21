@@ -14,12 +14,11 @@
 # ==============================================================================
 
 """Class for sampling new programs."""
-from collections.abc import Collection, Sequence
+from collections.abc import Sequence
 from abc import ABC, abstractmethod
 import replicate
-
-
-import numpy as np
+import copy
+import asyncio
 
 from . import evaluator
 from . import programs_database
@@ -31,67 +30,71 @@ class LLM(ABC):
     def __init__(self, samples_per_prompt: int) -> None:
         self._samples_per_prompt = samples_per_prompt
 
-    def draw_samples(self, prompt: str) -> Collection[str]:
-        """Returns multiple predicted continuations of `prompt`."""
-        return [self._draw_sample(prompt) for _ in range(self._samples_per_prompt)]
+    # TODO: make it async
+    async def draw_samples_and_send_to_queue(self, prompt: str, queue) -> None:
+        tasks = [
+            asyncio.create_task(self._draw_sample_and_send_to_queue(prompt, queue))
+            for _ in range(self._samples_per_prompt)
+        ]
+        await asyncio.gather(*tasks)
 
     @abstractmethod
-    def _draw_sample(self, prompt: str) -> str:
+    async def _draw_sample_and_send_to_queue(
+        self, prompt: str, queue: asyncio.Queue
+    ) -> None:
         pass
 
 
 # https://replicate.com/meta/codellama-34b-python
 CODELLAMA_34B_PYTHON = "meta/codellama-34b-python:e4cb69045bdb604862e80b5dd17ef39c9559ad3533e9fd3bd513cc68ff023656"
-
-
-class ReplicateLLM(LLM):
-    """Concrete implementation of LLM that provides a language model."""
-
-    def __init__(self, samples_per_prompt: int) -> None:
-        super().__init__(samples_per_prompt)
-
-    def _draw_sample(self, prompt: str) -> str:
-        output_generator = replicate.run(
-            CODELLAMA_34B_PYTHON,
-            input={
+DEFAULT_INPUT_ARGS = {
                 "top_k": 50,
                 "top_p": 0.9,
-                "prompt": prompt,
                 "max_tokens": 500,
                 "temperature": 0.75,
                 "repeat_penalty": 1.1,
                 "presence_penalty": 0,
                 "frequency_penalty": 0,
-            },
+            }
+
+class ReplicateLLM(LLM):
+    """Concrete implementation of LLM that provides a language model."""
+
+    def __init__(self, samples_per_prompt: int, input_args = DEFAULT_INPUT_ARGS) -> None:
+        super().__init__(samples_per_prompt)
+        self._input_args = input_args
+
+    # TODO: figure out how to run asyncio here.
+    async def _draw_sample_and_send_to_queue(self, prompt: str, queue) -> None:
+        input = copy.deepcopy(self._input_args)
+        input['prompt'] = prompt
+        output_generator = await replicate.async_run(
+            CODELLAMA_34B_PYTHON,
+            input=input
         )
-        output = ''.join(output_generator)
-        return output
+        output = "".join(output_generator)
+        queue.put(output)
 
 
 class Sampler:
     """Node that samples program continuations and sends them for analysis."""
 
+    # TODO: samples_per_prompt was original param for llm sampler, one can try tidy it up and remove it.
     def __init__(
         self,
         database: programs_database.ProgramsDatabase,
-        evaluators: Sequence[evaluator.Evaluator],
-        samples_per_prompt: int,
         total_llm_samples: int,
+        llm: LLM,
+        queue: asyncio.Queue,
     ) -> None:
         self._database = database
-        self._evaluators = evaluators
-        self._llm = ReplicateLLM(samples_per_prompt)
+        self._llm = llm
         self._total_llm_samples = total_llm_samples
         self.sample_cnt = 0
+        self._queue = queue
 
-    def sample(self):
-      """Continuously gets prompts, samples programs, sends them for analysis."""
-      while self.sample_cnt < self._total_llm_samples:
-        self.sample_cnt += 1
-        prompt = self._database.get_prompt()
-        samples = self._llm.draw_samples(prompt.code)
-        # This loop can be executed in parallel on remote evaluator machines.
-        for sample in samples:
-          chosen_evaluator = np.random.choice(self._evaluators)
-          chosen_evaluator.analyse(
-              sample, prompt.island_id, prompt.version_generated)
+    async def sample(self):
+        while self.sample_cnt < self._total_llm_samples:
+            self.sample_cnt += 1
+            prompt = self._database.get_prompt()
+            await self._llm.draw_samples_and_send_to_queue(prompt.code, self._queue)
