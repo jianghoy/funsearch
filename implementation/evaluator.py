@@ -27,6 +27,7 @@ from . import programs_database
 import os
 
 import uuid
+import logging
 
 
 class Evaluator:
@@ -41,6 +42,7 @@ class Evaluator:
         test_inputs: Sequence[Any],
         sandbox_docker_image: str,
         timeout_seconds: int = 10,
+        output_type: str = "float",
     ):
         self._database = database
         self._program = program
@@ -48,7 +50,7 @@ class Evaluator:
         self._function_to_run_name = function_to_run_name
         self._test_inputs = test_inputs
         self._timeout_seconds = timeout_seconds
-        self._sandbox = Sandbox(sandbox_docker_image)
+        self._sandbox = Sandbox(sandbox_docker_image, output_type)
 
     def analyse(
         self,
@@ -63,10 +65,13 @@ class Evaluator:
 
         scores_per_test = {}
         skip_registering = False
+        print(program)
+        print('Program output complete')
         for test_input in self._test_inputs:
             test_output, runs_ok = self._sandbox.run(
                 program, self._function_to_run_name, test_input, self._timeout_seconds
             )
+            print(f'test input: {test_input}; test output: {test_output}; runs ok: {runs_ok}')
             if (
                 runs_ok
                 and not _calls_ancestor(program, self._function_to_evolve_name)
@@ -78,14 +83,16 @@ class Evaluator:
             else:
                 skip_registering = True
         if not skip_registering:
+            print(f'Registering function {new_function} with scores {scores_per_test}')
             self._database.register_function(new_function, island_id, scores_per_test)
 
 
 class Sandbox:
     """Sandbox for executing generated code."""
 
-    def __init__(self, docker_image):
+    def __init__(self, docker_image: str, output_type: str):
         self._docker_image = docker_image
+        self._output_type = output_type
 
     def run(
         self,
@@ -101,7 +108,6 @@ class Sandbox:
         host_file_name = f"{current_directory}/tmp_{id}.py"
         volume_file_name = f"/tmp/run.py"
         _write_python_file(host_file_name, program, function_to_run, test_input)
-
         client = docker.from_env()
         container = client.containers.run(
             self._docker_image,
@@ -114,23 +120,24 @@ class Sandbox:
             },
             command=f"python {volume_file_name}",
         )
-
+        logging.info(f"Container {container.short_id} started")
+        logging.info(f"Container {container.short_id} runs this program: {program}")
         _wait_for_finish(container, timeout_seconds)
         if container.status != "exited":
             print(
                 f"Container {container.short_id} timed out; will kill and does not take result"
             )
+            logging.error(f"CONTAINER {container.short_id} TIMED OUT! LOG: {container.logs().decode('utf-8')}")
             container.remove(force=True)
             os.remove(host_file_name)
             return None, False
-        print(f"Containter exited: {container.short_id}")
 
         response = container.wait()
         if response["StatusCode"] != 0:
             print(
                 f"Container {container.short_id} failed with exit code {response['StatusCode']}; does not take result"
             )
-            print(f"Container logs: {container.logs().decode('utf-8')}")
+            logging.error(f"CONTAINER {container.short_id} FAILED! LOG: {container.logs().decode('utf-8')}")
             container.remove(force=True)
             os.remove(host_file_name)
             return None, False
@@ -139,10 +146,19 @@ class Sandbox:
         container_logs = container.logs().decode("utf-8").strip()
         container.remove()
         os.remove(host_file_name)
-        if "." in container_logs:
-            return float(container_logs), True
-        else:
-            return int(container_logs), True
+        print(f'Container {container.short_id} success!')
+        logging.info(f'Container {container.short_id} success! log: {container_logs}')
+        try: 
+            if self._output_type == 'float':
+                return float(container_logs), True
+            elif self._output_type == 'int':
+                return int(container_logs), True
+            else:
+                raise NotImplementedError(f'Output type {self._output_type} not implemented')
+        except ValueError:
+            print('Container returned invalid output')
+            print(f'Container logs:{container_logs}')
+            return None, False
 
 
 class _FunctionLineVisitor(ast.NodeVisitor):

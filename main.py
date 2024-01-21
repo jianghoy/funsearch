@@ -3,6 +3,8 @@ from implementation.config import ProgramsDatabaseConfig, Config
 import argparse
 import dataclasses
 from dotenv import load_dotenv
+import logging
+import time
 
 # Generate a argparse where it takes all required params of Config and ProgramsDatabaseConfig, should set
 # them to all optional
@@ -63,7 +65,7 @@ def parse_args():
 def main():
     load_dotenv()
     args = parse_args()
-
+    logging.basicConfig(level=logging.INFO, filename=f'main_{time.time()}.log')
     # Use the __dict__ attribute of args to pass the arguments to the dataclass.
     # Filter out None values to let dataclass use its default values.
     args_dict = {k: v for k, v in vars(args).items() if v is not None}

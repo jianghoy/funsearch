@@ -40,9 +40,16 @@ def main(specification: str, test_inputs: Sequence[Any], config: config_lib.Conf
     """
     function_to_evolve, function_to_run = _extract_function_names(specification)
 
-    template = code_manipulation.text_to_program(specification)
+    program = code_manipulation.text_to_program(specification)
+    output_type = ''
+    for func in program.functions:
+        if func.name == function_to_run:
+            output_type = func.return_type
+            print(f'output type is {output_type}')
+            break
+
     database = programs_database.ProgramsDatabase(
-        config.programs_database, template, function_to_evolve
+        config.programs_database, program, function_to_evolve
     )
 
     evaluators = []
@@ -50,15 +57,16 @@ def main(specification: str, test_inputs: Sequence[Any], config: config_lib.Conf
         evaluators.append(
             evaluator.Evaluator(
                 database,
-                template,
+                program,
                 function_to_evolve,
                 function_to_run,
                 test_inputs,
                 config.docker_image,
+                output_type=output_type
             )
         )
     # We send the initial implementation to be analysed by one of the evaluators.
-    initial = template.get_function(function_to_evolve).body
+    initial = program.get_function(function_to_evolve).body
     evaluators[0].analyse(initial, island_id=None, version_generated=None)
 
     samplers = [

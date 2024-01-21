@@ -51,9 +51,7 @@ class ReplicateLLM(LLM):
         super().__init__(samples_per_prompt)
 
     def _draw_sample(self, prompt: str) -> str:
-        print(prompt)
-        raise NotImplementedError("stop here for now")
-        output = replicate.run(
+        output_generator = replicate.run(
             CODELLAMA_34B_PYTHON,
             input={
                 "top_k": 50,
@@ -66,6 +64,7 @@ class ReplicateLLM(LLM):
                 "frequency_penalty": 0,
             },
         )
+        output = ''.join(output_generator)
         return output
 
 
@@ -88,6 +87,7 @@ class Sampler:
     def sample(self):
       """Continuously gets prompts, samples programs, sends them for analysis."""
       while self.sample_cnt < self._total_llm_samples:
+        self.sample_cnt += 1
         prompt = self._database.get_prompt()
         samples = self._llm.draw_samples(prompt.code)
         # This loop can be executed in parallel on remote evaluator machines.
