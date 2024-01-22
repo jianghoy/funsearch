@@ -5,6 +5,7 @@ import dataclasses
 from dotenv import load_dotenv
 import logging
 import time
+import asyncio
 
 # Generate a argparse where it takes all required params of Config and ProgramsDatabaseConfig, should set
 # them to all optional
@@ -83,7 +84,7 @@ def main():
         specification = file.read()
     with open(args.test_inputs_file) as file:
         test_inputs = file.read().splitlines()
-    funsearch.main(specification, test_inputs, config)
+    asyncio.run(funsearch.main(specification, test_inputs, config))
 
 
 # generate default

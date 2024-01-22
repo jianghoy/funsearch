@@ -39,7 +39,6 @@ async def main(specification: str, test_inputs: Sequence[Any], config: config_li
       None
     """
     function_to_evolve, function_to_run = _extract_function_names(specification)
-    evaluator.init_semaphore(config.max_concurrent_sandbox_run)
 
     program = code_manipulation.text_to_program(specification)
     output_type = ''
@@ -49,8 +48,9 @@ async def main(specification: str, test_inputs: Sequence[Any], config: config_li
             print(f'output type is {output_type}')
             break
 
+    database_populated = asyncio.Event()
     database = programs_database.ProgramsDatabase(
-        config.programs_database, program, function_to_evolve
+        config.programs_database, program, function_to_evolve, database_populated
     )
 
     queue = asyncio.Queue()
@@ -60,6 +60,7 @@ async def main(specification: str, test_inputs: Sequence[Any], config: config_li
             evaluator.Evaluator(
                 database,
                 program,
+                queue,
                 function_to_evolve,
                 function_to_run,
                 test_inputs,
@@ -69,8 +70,7 @@ async def main(specification: str, test_inputs: Sequence[Any], config: config_li
         )
     # We send the initial implementation to be analysed by one of the evaluators.
     initial = program.get_function(function_to_evolve).body
-    await evaluators[0].analyse(initial, island_id=None, version_generated=None)
-
+    await queue.put((initial, None, None))
     llm = sampler.ReplicateLLM(config.samples_per_prompt, queue)
     samplers = [
         sampler.Sampler(
@@ -97,7 +97,7 @@ async def main(specification: str, test_inputs: Sequence[Any], config: config_li
         traceback.print_exc()
         print(e)
     finally:
-        database.report()
+        await database.report()
 
 
 def _extract_function_names(specification: str) -> tuple[str, str]:

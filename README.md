@@ -11,7 +11,7 @@ This repository contains Jianghong's implementation of infra of [funsearch](http
 - [ ] single host `asyncio` based multitasking for running FunSearch efficiently. See below for analysis.
 
 ## Why asyncio?
-Based on my observation, implementing multi-host or multi-process for funsearch is not beneficial under a certain scale limit. Here I assume a typical user uses a cloud based LLM provider via API.(based on the paper it seems the experiment setup manages a set of ML accelerators, which by default has to be distributed, and brings a lot of engineering level challenges). The bottleneck is not the CPU or memory, but the network latency (and cost) of each LLM API call, which is around 1 second. The python method to be executed in sandbox doesn't seem to use a lot of resources either. So the typical workload fits nicely to the `asyncio` model. Given enough budget, one may be able to call hundreds of LLM APIs in parallel, and multi-host can be beneficial.  
+Based on my observation, implementing multi-host or multi-process for funsearch is not beneficial under a certain scale limit. Here I assume a typical user uses a cloud based LLM provider via API.(based on the paper it seems the original experiment infra includes a set of ML accelerators (*The distributed setting enables running many evaluator nodes on inexpensive CPU hardware, while few samplers run on machines with accelerators for fast LLM inference, page 6 of funsearch paper*), which by default likely has to be distributed anyway for model like Palm2). Once we move ML accelerators out of the infra setup, the bottleneck becomes network latency (and cost) of each LLM API call, which is around 1 second. The python method to be executed in sandbox doesn't seem to use a lot of resources either. So the typical workload fits nicely to the `asyncio` model. Given enough budget, one may be able to call hundreds of LLM APIs in parallel, and multi-host can be beneficial in that setting.  
 
 ## Installation
 ### Using poetry
@@ -31,39 +31,8 @@ To use remote APIs for generating new python functions, you need to first rename
 ```
 python main.py -s specs_example_cap_set.py -t test_inputs_example_cap_set.txt
 ```
-```bash
-options:
-  -h, --help            show this help message and exit
-  --functions_per_prompt FUNCTIONS_PER_PROMPT
-                        functions_per_prompt (default: 2)
-  --num_islands NUM_ISLANDS
-                        num_islands (default: 10)
-  --reset_period RESET_PERIOD
-                        reset_period (default: 14400)
-  --cluster_sampling_temperature_init CLUSTER_SAMPLING_TEMPERATURE_INIT
-                        cluster_sampling_temperature_init (default: 0.1)
-  --cluster_sampling_temperature_period CLUSTER_SAMPLING_TEMPERATURE_PERIOD
-                        cluster_sampling_temperature_period (default: 30000)
-  --num_samplers NUM_SAMPLERS
-                        num_samplers (default: 15)
-  --num_evaluators NUM_EVALUATORS
-                        num_evaluators (default: 140)
-  --samples_per_prompt SAMPLES_PER_PROMPT
-                        samples_per_prompt (default: 4)
-  --specification_file SPECIFICATION_FILE, -s SPECIFICATION_FILE
-                        Path to the specification file. Specification contains the code to evolve and the code to run,
-                        denoted using decorators @funsearch.evolve and @funsearch.run. Decorators in spec files are just for
-                        annotation purposes only. In fact they're disabled per code_manpulation.ProgramVisitor See
-                        specs_example_cap_set.py for an example.
-  --test_inputs_file TEST_INPUTS_FILE, -t TEST_INPUTS_FILE
-                        Path to the file containing the test inputs. Each line of the file is a test input, and the test
-                        inputs are separated by new lines. See test_inputs_example_cap_set.txt for an example.
-```
-### `specification_file`
-See [specs_example_cap_set.py](specs_example_cap_set.py) for an example. Basically, you want to add annotation `@funsearch.evolve` to your code to denote which part of the code should be evolved and `@funsearch.run`which part should be run.
 
+### `specification_file`
+See [specs_example_cap_set.py](specs_example_cap_set.py) for an example. Basically, you want to add annotation `@funsearch.evolve` to your code to denote which part of the code should be evolved and `@funsearch.run` which part should be evaluation entrypoint.
 ### `test_input_file`
 Test cases input, each line is 1 test case. See [test_inputs_example_cap_set.txt](test_inputs_example_cap_set.txt) for an example.
-
-# TODO
-1. It seems that right now the Prompt being feed into the LLM generator is missing the skeleton. Basically, according to [paper](https://storage.googleapis.com/deepmind-media/DeepMind.com/Blog/funsearch-making-new-discoveries-in-mathematical-sciences-using-large-language-models/Mathematical-discoveries-from-program-search-with-large-language-models.pdf) page 24, we need to add the skeleton to the prompt.
