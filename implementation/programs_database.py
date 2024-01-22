@@ -83,7 +83,6 @@ class ProgramsDatabase:
         self._last_reset_time: float = time.time()
         self._lock = asyncio.Lock()
         self._populated = populated
-        
 
     async def get_prompt(self) -> Prompt:
         """Returns a prompt containing implementations from one chosen island."""
@@ -101,7 +100,7 @@ class ProgramsDatabase:
         """Registers `function` in the database. The function, is the function we wish to involve, denoted by @funsearch.evolve"""
         # TODO: In an asynchronous implementation we should consider the possibility of
         # registering a function on an island that had been reset after the prompt
-        # was generated. 
+        # was generated.
         # Basically, you need to assign a island version to each island, and each time
         # you reset the island, the island's version goes up. When you sample from an island, you need to keep
         # the island version, and when you add back you check and see if island version is bigger than the island
@@ -109,7 +108,7 @@ class ProgramsDatabase:
         #
         # However, you also need to factor in concurrency.
         async with self._lock:
-            print('Database: Function registration started.')
+            print("Database: Function registration started.")
             if island_id is None:
                 # This is a function added at the beginning, so adding it to all islands.
                 for island in self._islands:
@@ -122,8 +121,8 @@ class ProgramsDatabase:
                 self._last_reset_time = time.time()
                 self.reset_islands()
             self._populated.set()
-            print('Database: Function registration complete.')
-    
+            print("Database: Function registration complete.")
+
     async def wait_until_populated(self):
         await self._populated.wait()
 
@@ -148,13 +147,12 @@ class ProgramsDatabase:
                     self._config.functions_per_prompt,
                     self._config.cluster_sampling_temperature_init,
                     self._config.cluster_sampling_temperature_period,
-                    island_id
+                    island_id,
                 )
                 founder_island_id = np.random.choice(keep_islands_ids)
                 founder = self._islands[founder_island_id]._best_function
                 founder_scores = self._islands[founder_island_id]._best_scores_per_test
                 self._islands[island_id].register_function(founder, founder_scores)
-    
 
     async def report(self) -> None:
         async with self._lock:
@@ -170,9 +168,11 @@ class ProgramsDatabase:
             with open(report_dir + "/report.txt", "w") as f:
                 f.write(f"Best score per islands:\n")
                 # order by key of best_score_per_test,and best_score_per_test to file
-                for island in self._islands:
+                for i in range(len(self._islands)):
+                    island = self._island[i]
                     best_score_per_test = island._best_scores_per_test
                     sorted_keys = sorted(best_score_per_test.keys())
+                    f.write(f"Island {i}: ")
                     f.write("{")
                     for key in sorted_keys:
                         f.write(f"{key}: {best_score_per_test[key]},")
@@ -194,7 +194,7 @@ class Island:
         cluster_sampling_temperature_init: float,
         cluster_sampling_temperature_period: int,
         id: int,
-        lock: asyncio.Lock = None
+        lock: asyncio.Lock = None,
     ) -> None:
         self._template: code_manipulation.Program = template
         self._function_to_evolve: str = function_to_evolve
@@ -205,9 +205,9 @@ class Island:
         self._clusters: dict[Signature, Cluster] = {}
         self._num_functions: int = 0
 
-        self._best_score = -float("inf")
-        self._best_function = None
-        self._best_scores_per_test = None
+        self._best_score: float = -float("inf")
+        self._best_function: code_manipulation.Function = None
+        self._best_scores_per_test: ScoresPerTest = None
         self._id = id
 
     def register_function(
@@ -229,7 +229,6 @@ class Island:
             self._best_function = function
             self._best_scores_per_test = scores_per_test
             logging.info("Best score of island %d increased to %s", self._id, score)
-
 
     # TODO: test this.
     def get_prompt(self) -> tuple[str, int]:
@@ -264,7 +263,10 @@ class Island:
         indices = np.argsort(scores)
         sorted_implementations = [implementations[i] for i in indices]
         version_generated = len(sorted_implementations) + 1
-        return self._generate_prompt(copy.deepcopy(sorted_implementations)), version_generated
+        return (
+            self._generate_prompt(copy.deepcopy(sorted_implementations)),
+            version_generated,
+        )
 
     def _generate_prompt(
         self, implementations: Sequence[code_manipulation.Function]
