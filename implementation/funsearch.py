@@ -17,7 +17,7 @@
 from collections.abc import Sequence
 from typing import Any
 import traceback
-
+import asyncio
 from . import code_manipulation
 from . import config as config_lib
 from . import evaluator
@@ -25,7 +25,7 @@ from . import programs_database
 from . import sampler
 
 
-def main(specification: str, test_inputs: Sequence[Any], config: config_lib.Config):
+async def main(specification: str, test_inputs: Sequence[Any], config: config_lib.Config):
     """
     Launches a FunSearch experiment.
 
@@ -39,6 +39,7 @@ def main(specification: str, test_inputs: Sequence[Any], config: config_lib.Conf
       None
     """
     function_to_evolve, function_to_run = _extract_function_names(specification)
+    evaluator.init_semaphore(config.max_concurrent_sandbox_run)
 
     program = code_manipulation.text_to_program(specification)
     output_type = ''
@@ -52,6 +53,7 @@ def main(specification: str, test_inputs: Sequence[Any], config: config_lib.Conf
         config.programs_database, program, function_to_evolve
     )
 
+    queue = asyncio.Queue()
     evaluators = []
     for _ in range(config.num_evaluators):
         evaluators.append(
@@ -67,11 +69,12 @@ def main(specification: str, test_inputs: Sequence[Any], config: config_lib.Conf
         )
     # We send the initial implementation to be analysed by one of the evaluators.
     initial = program.get_function(function_to_evolve).body
-    evaluators[0].analyse(initial, island_id=None, version_generated=None)
+    await evaluators[0].analyse(initial, island_id=None, version_generated=None)
 
+    llm = sampler.ReplicateLLM(config.samples_per_prompt, queue)
     samplers = [
         sampler.Sampler(
-            database, evaluators, config.samples_per_prompt, config.total_llm_samples
+            database, config.total_llm_samples, llm
         )
         for _ in range(config.num_samplers)
     ]
@@ -80,8 +83,16 @@ def main(specification: str, test_inputs: Sequence[Any], config: config_lib.Conf
     # sampler enters an infinite loop, without parallelization only the first
     # sampler will do any work.
     try:
-        for s in samplers:
-            s.sample()
+        producer_tasks = [asyncio.create_task(s.sample()) for s in samplers]
+        consumer_tasks = [asyncio.create_task(e.analyse()) for e in evaluators]
+        await asyncio.gather(*producer_tasks)
+        await queue.join()
+        # Enqueue sentinel values
+        for _ in range(config.num_evaluators):
+            await queue.put(None)
+
+        # Wait for consumers to finish
+        await asyncio.gather(*consumer_tasks)
     except Exception as e:
         traceback.print_exc()
         print(e)
