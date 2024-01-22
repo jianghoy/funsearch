@@ -132,6 +132,7 @@ class ProgramsDatabaseTest(parameterized.TestCase):
         functions_per_prompt=2,
         cluster_sampling_temperature_init=1.0,
         cluster_sampling_temperature_period=30_000,
+        id=1
     )
     sample_a = copy.deepcopy(template.get_function(function_to_evolve))
     sample_a.body = _SAMPLE_A
@@ -161,7 +162,8 @@ class ProgramsDatabaseTest(parameterized.TestCase):
 
     expected_scores = list(scores)
     expected_scores[7] = 17
-    self.assertSequenceEqual(database._best_score_per_island, expected_scores)
+    best_score_per_island = [island._best_score for island in database._islands]
+    self.assertSequenceEqual(best_score_per_island, expected_scores)
 
     np.random.seed(0)
     database.reset_islands()
@@ -169,9 +171,9 @@ class ProgramsDatabaseTest(parameterized.TestCase):
     min_kept = min(expected_scores[i] for i in expected_kept)
     for i, score in enumerate(expected_scores):
       if i in expected_kept:
-        self.assertEqual(database._best_score_per_island[i], score)
+        self.assertEqual(database._islands[i]._best_score, score)
       else:
-        self.assertGreaterEqual(database._best_score_per_island[i], min_kept)
+        self.assertGreaterEqual(database._islands[i]._best_score, min_kept)
 
   @parameterized.parameters([
       dict(logits=np.array([10, 9, -1000], dtype=np.float32)),
@@ -215,6 +217,9 @@ class ProgramsDatabaseTest(parameterized.TestCase):
     ):
       programs_database._softmax(logits, temperature=1.0)
 
+  def test__reduce_score(self):
+    scores_per_test={'3':8,'4':20}
+    self.assertEqual(20, programs_database._reduce_score(scores_per_test))
 
 if __name__ == '__main__':
   absltest.main()

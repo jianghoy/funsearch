@@ -66,7 +66,7 @@ class ProgramsDatabase:
 
         # Initialize empty islands.
         self._islands: list[Island] = []
-        for _ in range(config.num_islands):
+        for i in range(config.num_islands):
             self._islands.append(
                 Island(
                     template,
@@ -74,15 +74,9 @@ class ProgramsDatabase:
                     config.functions_per_prompt,
                     config.cluster_sampling_temperature_init,
                     config.cluster_sampling_temperature_period,
+                    i
                 )
             )
-        self._best_score_per_island: list[float] = [-float("inf")] * config.num_islands
-        self._best_function_per_island: list[code_manipulation.Function | None] = [
-            None
-        ] * config.num_islands
-        self._best_scores_per_test_per_island: list[ScoresPerTest | None] = [
-            None
-        ] * config.num_islands
 
         self._last_reset_time: float = time.time()
 
@@ -99,9 +93,15 @@ class ProgramsDatabase:
         scores_per_test: ScoresPerTest,
     ) -> None:
         """Registers `function` in the database. The function, is the function we wish to involve, denoted by @funsearch.evolve"""
-        # In an asynchronous implementation we should consider the possibility of
+        # TODO: In an asynchronous implementation we should consider the possibility of
         # registering a function on an island that had been reset after the prompt
-        # was generated. Leaving that out here for simplicity.
+        # was generated. 
+        # Basically, you need to assign a island version to each island, and each time
+        # you reset the island, the island's version goes up. When you sample from an island, you need to keep
+        # the island version, and when you add back you check and see if island version is bigger than the island
+        # version you get when you sample the program. If yes, then you cannot add it back.
+        #
+        # However, you also need to factor in concurrency.
         if island_id is None:
             # This is a function added at the beginning, so adding it to all islands.
             for island_id in range(len(self._islands)):
@@ -122,19 +122,17 @@ class ProgramsDatabase:
     ) -> None:
         """Registers `function` in the specified island."""
         self._islands[island_id].register_function(function, scores_per_test)
-        score = _reduce_score(scores_per_test)
-        if score > self._best_score_per_island[island_id]:
-            self._best_function_per_island[island_id] = function
-            self._best_scores_per_test_per_island[island_id] = scores_per_test
-            self._best_score_per_island[island_id] = score
-            logging.info("Best score of island %d increased to %s", island_id, score)
 
     def reset_islands(self) -> None:
         """Resets the weaker half of islands."""
         # We sort best scores after adding minor noise to break ties.
+
+        best_score_per_island = np.array(
+            [self._islands[i]._best_score for i in range(len(self._islands))]
+        )
         indices_sorted_by_score: np.ndarray = np.argsort(
-            self._best_score_per_island
-            + np.random.randn(len(self._best_score_per_island)) * 1e-6
+            best_score_per_island
+            + np.random.randn(len(best_score_per_island)) * 1e-6
         )
         num_islands_to_reset = self._config.num_islands // 2
         reset_islands_ids = indices_sorted_by_score[:num_islands_to_reset]
@@ -146,11 +144,11 @@ class ProgramsDatabase:
                 self._config.functions_per_prompt,
                 self._config.cluster_sampling_temperature_init,
                 self._config.cluster_sampling_temperature_period,
+                island_id
             )
-            self._best_score_per_island[island_id] = -float("inf")
             founder_island_id = np.random.choice(keep_islands_ids)
-            founder = self._best_function_per_island[founder_island_id]
-            founder_scores = self._best_scores_per_test_per_island[founder_island_id]
+            founder = self._islands[founder_island_id]._best_function
+            founder_scores = self._islands[founder_island_id]._best_scores_per_test
             self._register_function_in_island(founder, island_id, founder_scores)
 
     def report(self) -> None:
@@ -166,16 +164,17 @@ class ProgramsDatabase:
         with open(report_dir + "/report.txt", "w") as f:
             f.write(f"Best score per islands:\n")
             # order by key of best_score_per_test,and best_score_per_test to file
-            for best_score_per_test in self._best_scores_per_test_per_island:
+            for island in self._islands:
+                best_score_per_test = island._best_scores_per_test
                 sorted_keys = sorted(best_score_per_test.keys())
                 f.write("{")
                 for key in sorted_keys:
                     f.write(f"{key}: {best_score_per_test[key]},")
                 f.write("}\n")
-        for i in range(len(self._best_function_per_island)):
+        for i in range(len(self._islands)):
             with open(report_dir + f"/island_{i}_best_program.py", "w") as f:
                 # TODO: update this to get best program instead of function
-                f.write(str(self._best_function_per_island[i]))
+                f.write(str(self._islands[i]._best_function))
 
 
 class Island:
@@ -188,6 +187,7 @@ class Island:
         functions_per_prompt: int,
         cluster_sampling_temperature_init: float,
         cluster_sampling_temperature_period: int,
+        id: int
     ) -> None:
         self._template: code_manipulation.Program = template
         self._function_to_evolve: str = function_to_evolve
@@ -198,6 +198,11 @@ class Island:
         self._clusters: dict[Signature, Cluster] = {}
         self._num_functions: int = 0
 
+        self._best_score = -float("inf")
+        self._best_function = None
+        self._best_scores_per_test = None
+        self._id = id
+
     def register_function(
         self,
         function: code_manipulation.Function,
@@ -205,12 +210,19 @@ class Island:
     ) -> None:
         """Stores a function on this island, in its appropriate cluster."""
         signature = _get_signature(scores_per_test)
+        score = _reduce_score(scores_per_test)
         if signature not in self._clusters:
-            score = _reduce_score(scores_per_test)
             self._clusters[signature] = Cluster(score, function)
         else:
             self._clusters[signature].register_function(function)
         self._num_functions += 1
+
+        if score > self._best_score:
+            self._best_score = score
+            self._best_function = function
+            self._best_scores_per_test = scores_per_test
+            logging.info("Best score of island %d increased to %s", self._id, score)
+
 
     # TODO: test this.
     def get_prompt(self) -> tuple[str, int]:
