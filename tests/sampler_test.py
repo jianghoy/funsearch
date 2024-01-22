@@ -37,8 +37,8 @@ class TestSampler(unittest.IsolatedAsyncioTestCase):
             mock_database, total_llm_samples, TestLLM(samples_per_prompt, mock_queue)
         )
         prompt = Prompt("code", 0, 0)
-        mock_database.get_prompt.return_value = prompt
-
+        mock_database.get_prompt = AsyncMock(return_value=prompt)
+        mock_database.wait_until_populated = AsyncMock()
         await sampler.sample()
 
         self.assertEqual(mock_database.get_prompt.call_count, total_llm_samples)

@@ -59,6 +59,7 @@ class ProgramsDatabase:
         config: config_lib.ProgramsDatabaseConfig,
         template: code_manipulation.Program,
         function_to_evolve: str,
+        populated: asyncio.Event,
     ) -> None:
         self._config: config_lib.ProgramsDatabaseConfig = config
         self._template: code_manipulation.Program = template
@@ -81,6 +82,7 @@ class ProgramsDatabase:
 
         self._last_reset_time: float = time.time()
         self._lock = asyncio.Lock()
+        self._populated = populated
         
 
     async def get_prompt(self) -> Prompt:
@@ -107,6 +109,7 @@ class ProgramsDatabase:
         #
         # However, you also need to factor in concurrency.
         async with self._lock:
+            print('Database: Function registration started.')
             if island_id is None:
                 # This is a function added at the beginning, so adding it to all islands.
                 for island in self._islands:
@@ -118,6 +121,11 @@ class ProgramsDatabase:
             if time.time() - self._last_reset_time > self._config.reset_period:
                 self._last_reset_time = time.time()
                 self.reset_islands()
+            self._populated.set()
+            print('Database: Function registration complete.')
+    
+    async def wait_until_populated(self):
+        await self._populated.wait()
 
     async def reset_islands(self) -> None:
         """Resets the weaker half of islands."""

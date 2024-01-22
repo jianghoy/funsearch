@@ -78,9 +78,9 @@ class ReplicateLLM(LLM):
         self._input_args = input_args
 
     # TODO: figure out how to run asyncio here.
-    async def _draw_sample(self, prompt: programs_database.Prompt, queue) -> None:
+    async def _draw_sample(self, prompt: str) -> None:
         input = copy.deepcopy(self._input_args)
-        input["prompt"] = prompt.code
+        input["prompt"] = prompt
         output_generator = await replicate.async_run(CODELLAMA_34B_PYTHON, input=input)
         output = "".join(output_generator)
         return output
@@ -102,6 +102,7 @@ class Sampler:
         self.sample_cnt = 0
 
     async def sample(self):
+        await self._database.wait_until_populated()
         for _ in range(self._total_llm_samples):
-            prompt = self._database.get_prompt()
+            prompt = await self._database.get_prompt()
             await self._llm.draw_samples_and_send_to_queue(prompt)

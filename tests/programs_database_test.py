@@ -22,7 +22,7 @@ from implementation import code_manipulation
 from implementation import config
 from implementation import programs_database
 import unittest
-
+from unittest.mock import MagicMock
 _SKELETON = '''
 """Finds large cap sets."""
 import numpy as np
@@ -112,6 +112,7 @@ class AsyncProgramsDatabaseTest(unittest.IsolatedAsyncioTestCase):
             config=config.ProgramsDatabaseConfig(functions_per_prompt=5),
             template=template,
             function_to_evolve=function_to_evolve,
+            populated=MagicMock()
         )
         # Register the initial implementation provided in the skeleton template.
         await database.register_function(
@@ -130,6 +131,7 @@ class AsyncProgramsDatabaseTest(unittest.IsolatedAsyncioTestCase):
             config=config.ProgramsDatabaseConfig(num_islands=10),
             template=template,
             function_to_evolve=function_to_evolve,
+            populated=MagicMock()
         )
         scores = [7, 3, 5, 6, 7, -2, 0, -1, 4, 3]
         unused_function = template.get_function(function_to_evolve)
