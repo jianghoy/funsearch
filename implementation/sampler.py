@@ -102,7 +102,6 @@ class Sampler:
         self.sample_cnt = 0
 
     async def sample(self):
-        while self.sample_cnt < self._total_llm_samples:
-            self.sample_cnt += 1
+        for _ in range(self._total_llm_samples):
             prompt = self._database.get_prompt()
             await self._llm.draw_samples_and_send_to_queue(prompt)
