@@ -21,6 +21,7 @@ import time
 from datetime import datetime
 import os
 from typing import Any
+import asyncio
 
 from absl import logging
 import numpy as np
@@ -74,19 +75,22 @@ class ProgramsDatabase:
                     config.functions_per_prompt,
                     config.cluster_sampling_temperature_init,
                     config.cluster_sampling_temperature_period,
-                    i
+                    i,
                 )
             )
 
         self._last_reset_time: float = time.time()
+        self._lock = asyncio.Lock()
+        
 
-    def get_prompt(self) -> Prompt:
+    async def get_prompt(self) -> Prompt:
         """Returns a prompt containing implementations from one chosen island."""
-        island_id = np.random.randint(len(self._islands))
-        code, version_generated = self._islands[island_id].get_prompt()
-        return Prompt(code, version_generated, island_id)
+        async with self._lock:
+            island_id = np.random.randint(len(self._islands))
+            code, version_generated = self._islands[island_id].get_prompt()
+            return Prompt(code, version_generated, island_id)
 
-    def register_function(
+    async def register_function(
         self,
         function: code_manipulation.Function,
         island_id: int | None,
@@ -102,79 +106,73 @@ class ProgramsDatabase:
         # version you get when you sample the program. If yes, then you cannot add it back.
         #
         # However, you also need to factor in concurrency.
-        if island_id is None:
-            # This is a function added at the beginning, so adding it to all islands.
-            for island_id in range(len(self._islands)):
-                self._register_function_in_island(function, island_id, scores_per_test)
-        else:
-            self._register_function_in_island(function, island_id, scores_per_test)
+        async with self._lock:
+            if island_id is None:
+                # This is a function added at the beginning, so adding it to all islands.
+                for island in self._islands:
+                    island.register_function(function, scores_per_test)
+            else:
+                self._islands[island_id].register_function(function, scores_per_test)
 
-        # Check whether it is time to reset an island.
-        if time.time() - self._last_reset_time > self._config.reset_period:
-            self._last_reset_time = time.time()
-            self.reset_islands()
+            # Check whether it is time to reset an island.
+            if time.time() - self._last_reset_time > self._config.reset_period:
+                self._last_reset_time = time.time()
+                self.reset_islands()
 
-    def _register_function_in_island(
-        self,
-        function: code_manipulation.Function,
-        island_id: int,
-        scores_per_test: ScoresPerTest,
-    ) -> None:
-        """Registers `function` in the specified island."""
-        self._islands[island_id].register_function(function, scores_per_test)
-
-    def reset_islands(self) -> None:
+    async def reset_islands(self) -> None:
         """Resets the weaker half of islands."""
         # We sort best scores after adding minor noise to break ties.
-
-        best_score_per_island = np.array(
-            [self._islands[i]._best_score for i in range(len(self._islands))]
-        )
-        indices_sorted_by_score: np.ndarray = np.argsort(
-            best_score_per_island
-            + np.random.randn(len(best_score_per_island)) * 1e-6
-        )
-        num_islands_to_reset = self._config.num_islands // 2
-        reset_islands_ids = indices_sorted_by_score[:num_islands_to_reset]
-        keep_islands_ids = indices_sorted_by_score[num_islands_to_reset:]
-        for island_id in reset_islands_ids:
-            self._islands[island_id] = Island(
-                self._template,
-                self._function_to_evolve,
-                self._config.functions_per_prompt,
-                self._config.cluster_sampling_temperature_init,
-                self._config.cluster_sampling_temperature_period,
-                island_id
+        async with self._lock:
+            best_score_per_island = np.array(
+                [self._islands[i]._best_score for i in range(len(self._islands))]
             )
-            founder_island_id = np.random.choice(keep_islands_ids)
-            founder = self._islands[founder_island_id]._best_function
-            founder_scores = self._islands[founder_island_id]._best_scores_per_test
-            self._register_function_in_island(founder, island_id, founder_scores)
+            indices_sorted_by_score: np.ndarray = np.argsort(
+                best_score_per_island
+                + np.random.randn(len(best_score_per_island)) * 1e-6
+            )
+            num_islands_to_reset = self._config.num_islands // 2
+            reset_islands_ids = indices_sorted_by_score[:num_islands_to_reset]
+            keep_islands_ids = indices_sorted_by_score[num_islands_to_reset:]
+            for island_id in reset_islands_ids:
+                self._islands[island_id] = Island(
+                    self._template,
+                    self._function_to_evolve,
+                    self._config.functions_per_prompt,
+                    self._config.cluster_sampling_temperature_init,
+                    self._config.cluster_sampling_temperature_period,
+                    island_id
+                )
+                founder_island_id = np.random.choice(keep_islands_ids)
+                founder = self._islands[founder_island_id]._best_function
+                founder_scores = self._islands[founder_island_id]._best_scores_per_test
+                self._islands[island_id].register_function(founder, founder_scores)
+    
 
-    def report(self) -> None:
-        # if self.report_dir not exist create new directory
-        if not os.path.exists(self._report_root_dir):
-            os.makedirs(self._report_root_dir)
-        # make directory under self.report_dir with naming as report_datetime
-        report_dir = (
-            self._report_root_dir + "/" + datetime.now().strftime("%Y%m%d_%H%M%S")
-        )
-        os.makedirs(report_dir)
-        # write the report to a file
-        with open(report_dir + "/report.txt", "w") as f:
-            f.write(f"Best score per islands:\n")
-            # order by key of best_score_per_test,and best_score_per_test to file
-            for island in self._islands:
-                best_score_per_test = island._best_scores_per_test
-                sorted_keys = sorted(best_score_per_test.keys())
-                f.write("{")
-                for key in sorted_keys:
-                    f.write(f"{key}: {best_score_per_test[key]},")
-                f.write("}\n")
-        for i in range(len(self._islands)):
-            with open(report_dir + f"/island_{i}_best_program.py", "w") as f:
-                # TODO: update this to get best program instead of function
-                f.write(str(self._islands[i]._best_function))
+    async def report(self) -> None:
+        async with self._lock:
+            # if self.report_dir not exist create new directory
+            if not os.path.exists(self._report_root_dir):
+                os.makedirs(self._report_root_dir)
+            # make directory under self.report_dir with naming as report_datetime
+            report_dir = (
+                self._report_root_dir + "/" + datetime.now().strftime("%Y%m%d_%H%M%S")
+            )
+            os.makedirs(report_dir)
+            # write the report to a file
+            with open(report_dir + "/report.txt", "w") as f:
+                f.write(f"Best score per islands:\n")
+                # order by key of best_score_per_test,and best_score_per_test to file
+                for island in self._islands:
+                    best_score_per_test = island._best_scores_per_test
+                    sorted_keys = sorted(best_score_per_test.keys())
+                    f.write("{")
+                    for key in sorted_keys:
+                        f.write(f"{key}: {best_score_per_test[key]},")
+                    f.write("}\n")
+            for i in range(len(self._islands)):
+                with open(report_dir + f"/island_{i}_best_program.py", "w") as f:
+                    # TODO: update this to get best program instead of function
+                    f.write(str(self._islands[i]._best_function))
 
 
 class Island:
@@ -187,7 +185,8 @@ class Island:
         functions_per_prompt: int,
         cluster_sampling_temperature_init: float,
         cluster_sampling_temperature_period: int,
-        id: int
+        id: int,
+        lock: asyncio.Lock = None
     ) -> None:
         self._template: code_manipulation.Program = template
         self._function_to_evolve: str = function_to_evolve
@@ -257,13 +256,12 @@ class Island:
         indices = np.argsort(scores)
         sorted_implementations = [implementations[i] for i in indices]
         version_generated = len(sorted_implementations) + 1
-        return self._generate_prompt(sorted_implementations), version_generated
+        return self._generate_prompt(copy.deepcopy(sorted_implementations)), version_generated
 
     def _generate_prompt(
         self, implementations: Sequence[code_manipulation.Function]
     ) -> str:
         """Creates a prompt containing a sequence of function `implementations`."""
-        implementations = copy.deepcopy(implementations)  # We will mutate these.
 
         # Format the names and docstrings of functions to be included in the prompt.
         versioned_functions: list[code_manipulation.Function] = []
