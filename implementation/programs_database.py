@@ -169,7 +169,7 @@ class ProgramsDatabase:
                 f.write(f"Best score per islands:\n")
                 # order by key of best_score_per_test,and best_score_per_test to file
                 for i in range(len(self._islands)):
-                    island = self._island[i]
+                    island = self._islands[i]
                     best_score_per_test = island._best_scores_per_test
                     sorted_keys = sorted(best_score_per_test.keys())
                     f.write(f"Island {i}: ")
